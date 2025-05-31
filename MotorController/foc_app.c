@@ -9,7 +9,9 @@
 #include "tim.h"
 #include "usart.h"
 #include "vofa.h"
-#include "arm_math.h" // Add this include for arm_sin_f32 and arm_cos_f32
+
+
+void foc_current_restruct(axit_t *axit);
 
 float vangle = 0;
 float vamp   = 0.8f;
@@ -22,10 +24,8 @@ axit_t g_axit = {
     },
     .mode = FOC_MODE_VF,
     .udc  = 24.0f, // 电压
-    .amp  = 0.3f,
+    .amp  = 0.8f,
 };
-
-void foc_current_restruct(axit_t *axit);
 
 void foc_currControl(axit_t *axit)
 {
@@ -212,20 +212,6 @@ void foc_app_init(void)
     g_axit.udc = 24.0f; // 设置电压
 }
 
-void sincos_test(void)
-{
-    static float angle = 0;
-    angle += 0.1f;
-    if (angle > 2 * PI) {
-        angle -= 2 * PI;
-    }
-    float sin_value = arm_sin_f32(angle);
-    float cos_value = arm_cos_f32(angle);
-    vofa_set_channel(0, angle);
-    vofa_set_channel(1, sin_value);
-    vofa_set_channel(2, cos_value);
-    vofa_send(1);
-}
 
 void openloop_mode(void)
 {
@@ -306,103 +292,7 @@ void foc_current_restruct(axit_t *axit)
     axit->udc          = (float)axit->rawADC[4] * 3.3f / 4096.0f * 16; // udc
 }
 
-void mc_start(axit_t *axit)
-{
-    statemachine_nextState(&axit->stateMachine, S_IDLE_DONE);
-}
 
-void mc_stop(axit_t *axit)
-{
-    statemachine_nextState(&axit->stateMachine, S_ANY_STOP);
-}
-
-void foc_math_test(void)
-{
-    math_2f_t Idq    = {0};
-    math_2f_t Ialbe  = {0};
-    math_3f_t swtime = {0};
-    math_2f_t Udq    = {0};
-    math_2f_t Ualbe  = {0};
-
-    vangle += 0.01f;
-    vangle = fmodf(vangle, 2 * PI);
-    if (vangle > 2 * PI) {
-        vangle -= 2 * PI;
-    }
-    // 测试 Clarke 变换
-    g_axit.Iabc_fb.arg1 = 1.0f;
-    g_axit.Iabc_fb.arg2 = -0.5f;
-    g_axit.Iabc_fb.arg3 = -0.5f;
-    clark(&g_axit.Iabc_fb, &Ialbe);
-
-    // 测试 Park 变换
-    float test_angle = vangle;
-    park(&Ialbe, &Idq, test_angle);
-
-    // 反Park变换
-    invpark(&Idq, &Ualbe, test_angle);
-
-    // SVPWM 测试
-    svpwm(&Ualbe, &swtime, 24.0f, FOC_TIM_PRESCALER);
-
-    // 发送测试数据到 vofa
-
-    vofa_set_channel(1, vangle);
-    vofa_set_channel(2, Idq.arg2);
-    vofa_set_channel(3, Idq.arg1);
-    vofa_set_channel(4, Ialbe.arg1);
-    vofa_set_channel(5, Ialbe.arg2);
-    vofa_set_channel(6, Ualbe.arg1);
-    vofa_set_channel(7, Ualbe.arg2);
-    vofa_set_channel(8, swtime.arg1);
-    vofa_set_channel(9, swtime.arg2);
-    vofa_set_channel(10, swtime.arg3);
-
-    vofa_send(1);
-}
-
-void foc_math_test_idq_const(void)
-{
-    math_2f_t Idq    = {0};
-    math_2f_t Ialbe  = {0};
-    math_3f_t swtime = {0};
-    math_2f_t Udq    = {0};
-    math_2f_t Ualbe  = {0};
-
-    vangle += 0.01f;
-    vangle = fmodf(vangle, 2 * PI);
-    if (vangle > 2 * PI) {
-        vangle -= 2 * PI;
-    }
-
-    // 让Ialbe随角度变化
-    Ialbe.arg1 = arm_cos_f32(vangle);
-    Ialbe.arg2 = arm_sin_f32(vangle);
-
-    // Park变换
-    float test_angle = vangle;
-    park(&Ialbe, &Idq, test_angle);
-
-    // 反Park变换
-    invpark(&Idq, &Ualbe, test_angle);
-
-    // SVPWM 测试
-    svpwm(&Ualbe, &swtime, 24.0f, FOC_TIM_PRESCALER);
-
-    // 发送测试数据到 vofa
-    vofa_set_channel(1, vangle);
-    vofa_set_channel(2, Idq.arg2);
-    vofa_set_channel(3, Idq.arg1);
-    vofa_set_channel(4, Ialbe.arg1);
-    vofa_set_channel(5, Ialbe.arg2);
-    vofa_set_channel(6, Ualbe.arg1);
-    vofa_set_channel(7, Ualbe.arg2);
-    vofa_set_channel(8, swtime.arg1);
-    vofa_set_channel(9, swtime.arg2);
-    vofa_set_channel(10, swtime.arg3);
-
-    vofa_send(1);
-}
 
 // 电流采样中断
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)

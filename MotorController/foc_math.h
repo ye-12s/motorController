@@ -19,6 +19,10 @@ void invpark(const math_2f_t *const tdq, math_2f_t *talbe, float angle);
 int svpwm(math_2f_t *talbe, math_3f_t *swtiming, float udc, int tpwm);
 float pid_controller(pid_t *pid, float error);
 
+void foc_math_test(void);
+void foc_math_test_idq_const(void);
+void sincos_test(void);
+
 float fastsqrt(float val);
 float fastcos(float angle);
 float fastsin(float angle);
