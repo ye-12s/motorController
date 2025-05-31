@@ -1,12 +1,12 @@
 #include "state_machine.h"
 #include "stdbool.h"
 
-void sm_init(statemachine_t *stateMachine)
+void statemachine_init(statemachine_t *stateMachine)
 {
     stateMachine->state = S_IDLE;
 }
 
-bool sm_nextState(statemachine_t *stateMachine, state_t state)
+bool statemachine_nextState(statemachine_t *stateMachine, state_t state)
 {
     bool chargState   = false;
     state_t currState = stateMachine->state;
@@ -89,7 +89,7 @@ bool sm_nextState(statemachine_t *stateMachine, state_t state)
     return chargState;
 }
 
-state_t sm_getState(statemachine_t *stateMachine)
+state_t statemachine_getState(statemachine_t *stateMachine)
 {
     return stateMachine->state;
 }

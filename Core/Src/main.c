@@ -19,7 +19,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "dma.h"
 #include "spi.h"
+#include "stm32g4xx_hal.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
@@ -28,9 +30,11 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "mt6701.h"
+#include "usbd_cdc_if.h"
 #include "vofa.h"
 #include "foc_app.h"
-#include <stdarg.h>
+#include "utils.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -76,7 +80,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+uint32_t ctrl_cmd = 0;
 /* USER CODE END 0 */
 
 /**
@@ -107,6 +111,7 @@ int main(void)
 
     /* Initialize all configured peripherals */
     MX_GPIO_Init();
+    MX_DMA_Init();
     MX_TIM3_Init();
     MX_USB_Device_Init();
     MX_TIM1_Init();
@@ -116,30 +121,34 @@ int main(void)
     MX_ADC2_Init();
     MX_TIM2_Init();
     /* USER CODE BEGIN 2 */
-    vofa_init();
-
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4);
-    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2);
-    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, __HAL_TIM_GET_AUTORELOAD(&htim1) - 10);
-    HAL_ADCEx_InjectedStart_IT(&hadc1);
-    HAL_ADCEx_InjectedStart(&hadc2);
+    // foc_app_init();
+    // pwm_OutputEnable();
     /* USER CODE END 2 */
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     while (1) {
-        // mt6701_sampleNow(&encoder);
-        // printk("raw:%05d\r\n", encoder.raw >> 10);
-        vf_mode();
-        HAL_Delay(1);
+        if (ctrl_cmd != 0) {
+            switch (ctrl_cmd) {
+                case 0:
+                    break;
+                case 1:
+                    mc_start(&g_axit);
+                    break;
+                case 2:
+                    mc_stop(&g_axit);
+                    break;
+            }
+            ctrl_cmd = 0;
+        }
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
+        TIMER_TRIGGER_PUSH(500)
+        {
+            HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
+        }
+        TIMER_TRIGGER_POP();
     }
     /* USER CODE END 3 */
 }
@@ -190,27 +199,6 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
-
-/**
- * @brief  Period elapsed callback in non blocking mode
- * @note   This function is called  when TIM6 interrupt took place, inside
- * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
- * a global variable "uwTick" used as application time base.
- * @param  htim : TIM handle
- * @retval None
- */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    /* USER CODE BEGIN Callback 0 */
-
-    /* USER CODE END Callback 0 */
-    if (htim->Instance == TIM6) {
-        HAL_IncTick();
-    }
-    /* USER CODE BEGIN Callback 1 */
-
-    /* USER CODE END Callback 1 */
-}
 
 /**
  * @brief  This function is executed in case of error occurrence.

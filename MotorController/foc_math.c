@@ -8,29 +8,29 @@
 #define HOLLYST 0.017453292519943295769236907684886f
 
 const float pfSinTable[] = {
-    0.0,                                    //sin(0)
-    0.17364817766693034885171662676931 ,    //sin(10)
-    0.34202014332566873304409961468226 ,    //sin(20)
-    0.5 ,                                   //sin(30)
-    0.64278760968653932632264340990726 ,    //sin(40)
-    0.76604444311897803520239265055542 ,    //sin(50)
-    0.86602540378443864676372317075294 ,    //sin(60)
-    0.93969262078590838405410927732473 ,    //sin(70)
-    0.98480775301220805936674302458952 ,    //sin(80)
-    1.0                                     //sin(90)
+    0.0,                                // sin(0)
+    0.17364817766693034885171662676931, // sin(10)
+    0.34202014332566873304409961468226, // sin(20)
+    0.5,                                // sin(30)
+    0.64278760968653932632264340990726, // sin(40)
+    0.76604444311897803520239265055542, // sin(50)
+    0.86602540378443864676372317075294, // sin(60)
+    0.93969262078590838405410927732473, // sin(70)
+    0.98480775301220805936674302458952, // sin(80)
+    1.0                                 // sin(90)
 };
 
 const float pfCosTable[] = {
-    1.0 ,                                   //cos(0)
-    0.99984769515639123915701155881391 ,    //cos(1)
-    0.99939082701909573000624344004393 ,    //cos(2)
-    0.99862953475457387378449205843944 ,    //cos(3)
-    0.99756405025982424761316268064426 ,    //cos(4)
-    0.99619469809174553229501040247389 ,    //cos(5)
-    0.99452189536827333692269194498057 ,    //cos(6)
-    0.99254615164132203498006158933058 ,    //cos(7)
-    0.99026806874157031508377486734485 ,    //cos(8)
-    0.98768834059513772619004024769344      //cos(9)
+    1.0,                                // cos(0)
+    0.99984769515639123915701155881391, // cos(1)
+    0.99939082701909573000624344004393, // cos(2)
+    0.99862953475457387378449205843944, // cos(3)
+    0.99756405025982424761316268064426, // cos(4)
+    0.99619469809174553229501040247389, // cos(5)
+    0.99452189536827333692269194498057, // cos(6)
+    0.99254615164132203498006158933058, // cos(7)
+    0.99026806874157031508377486734485, // cos(8)
+    0.98768834059513772619004024769344  // cos(9)
 };
 
 void decompAlBe(float vecAmp, float angle, math_2f_t *talbe)
@@ -44,15 +44,15 @@ void decompDcbus(float busAct, math_2f_t *talbe, math_2f_t *talbecomp)
     talbecomp->arg1 = 1.0f / busAct * talbe->arg1;
     talbecomp->arg2 = 1.0f / busAct * talbe->arg2;
 
-    if(talbecomp->arg1 > 1.0f) {
+    if (talbecomp->arg1 > 1.0f) {
         talbecomp->arg1 = 1.0f;
-    }else if(talbecomp->arg1 < -1.0f) {
+    } else if (talbecomp->arg1 < -1.0f) {
         talbecomp->arg1 = -1.0f;
     }
 
-    if(talbecomp->arg2 > 1.0f) {
+    if (talbecomp->arg2 > 1.0f) {
         talbecomp->arg2 = 1.0f;
-    }else if(talbecomp->arg2 < -1.0f) {
+    } else if (talbecomp->arg2 < -1.0f) {
         talbecomp->arg2 = -1.0f;
     }
 }
@@ -68,7 +68,7 @@ void park(const math_2f_t *const talbe, math_2f_t *tdq, float angle)
     float fcos = arm_cos_f32(angle);
 
     tdq->arg1 = fcos * talbe->arg1 + fsin * talbe->arg2;
-    tdq->arg2 = fsin * talbe->arg2 - fsin * talbe->arg1;
+    tdq->arg2 = fcos * talbe->arg2 - fsin * talbe->arg1;
 }
 void invpark(const math_2f_t *const tdq, math_2f_t *talbe, float angle)
 {
@@ -78,6 +78,8 @@ void invpark(const math_2f_t *const tdq, math_2f_t *talbe, float angle)
     talbe->arg1 = tdq->arg1 * fcos - tdq->arg2 * fsin;
     talbe->arg2 = tdq->arg1 * fsin + tdq->arg2 * fcos;
 }
+
+#if 0
 
 int svpwm(const math_2f_t *const ab, math_3f_t *swtiming, math_3f_t *duty)
 {
@@ -178,49 +180,164 @@ int svpwm(const math_2f_t *const ab, math_3f_t *swtiming, math_3f_t *duty)
     return sector;
 }
 
+#endif
+
+int svpwm(math_2f_t *talbe, math_3f_t *swtiming, float udc, int tpwm)
+{
+    int sector = 0;
+    float Ta, Tb, Tc;
+    float Tx, Ty;
+    if (talbe->arg2 > 0) {
+        sector += 1;
+    }
+    if ((SQRT3 * talbe->arg1 - talbe->arg2) / 2.0f > 0) {
+        sector += 2;
+    }
+    if ((-SQRT3 * talbe->arg1 - talbe->arg2) / 2.0f > 0) {
+        sector += 4;
+    }
+
+    switch (sector) {
+        case 1:
+            Tx = (-1.5F * talbe->arg1 + 0.866025388F * talbe->arg2) * (tpwm / udc);
+            Ty = (1.5F * talbe->arg1 + 0.866025388F * talbe->arg2) * (tpwm / udc);
+            break;
+        case 2:
+            Tx = (1.5F * talbe->arg1 + 0.866025388F * talbe->arg2) * (tpwm / udc);
+            Ty = -(1.73205078F * talbe->arg2 * tpwm / udc);
+            break;
+        case 3:
+            Tx = -((-1.5F * talbe->arg1 + 0.866025388F * talbe->arg2) * (tpwm / udc));
+            Ty = 1.73205078F * talbe->arg2 * tpwm / udc;
+            break;
+        case 4:
+            Tx = -(1.73205078F * talbe->arg2 * tpwm / udc);
+            Ty = (-1.5F * talbe->arg1 + 0.866025388F * talbe->arg2) * (tpwm / udc);
+            break;
+        case 5:
+            Tx = 1.73205078F * talbe->arg2 * tpwm / udc;
+            Ty = -((1.5F * talbe->arg1 + 0.866025388F * talbe->arg2) * (tpwm / udc));
+            break;
+        default:
+            Tx = -((1.5F * talbe->arg1 + 0.866025388F * talbe->arg2) * (tpwm / udc));
+            Ty = -((-1.5F * talbe->arg1 + 0.866025388F * talbe->arg2) * (tpwm / udc));
+            break;
+    }
+
+    float f_temp = Tx + Ty;
+    if (f_temp > tpwm) {
+        Tx /= f_temp;
+        Ty /= (Tx + Ty);
+    }
+    Ta = (tpwm - (Tx + Ty)) / 4.0F;
+    Tb = Tx / 2.0F + Ta;
+    Tc = Ty / 2.0F + Tb;
+    switch (sector) {
+        case 1:
+            swtiming->arg1 = Tb;
+            swtiming->arg2 = Ta;
+            swtiming->arg3 = Tc;
+            break;
+
+        case 2:
+            swtiming->arg1 = Ta;
+            swtiming->arg2 = Tc;
+            swtiming->arg3 = Tb;
+            break;
+
+        case 3:
+            swtiming->arg1 = Ta;
+            swtiming->arg2 = Tb;
+            swtiming->arg3 = Tc;
+            break;
+
+        case 4:
+            swtiming->arg1 = Tc;
+            swtiming->arg2 = Tb;
+            swtiming->arg3 = Ta;
+            break;
+
+        case 5:
+            swtiming->arg1 = Tc;
+            swtiming->arg2 = Ta;
+            swtiming->arg3 = Tb;
+            break;
+
+        case 6:
+            swtiming->arg1 = Tb;
+            swtiming->arg2 = Tc;
+            swtiming->arg3 = Ta;
+            break;
+    }
+
+    return sector;
+}
+
+float pid_controller(pid_t *pid, float error)
+{
+    float kp_term = pid->kp * error;
+
+    pid->integral += error;
+    float ki_term = pid->ki * pid->integral;
+
+    pid->output = kp_term + ki_term;
+
+    if (pid->output > pid->upper_limit) {
+        float sat = pid->upper_limit - pid->output;
+        pid->integral += sat * pid->ka;
+        pid->output = pid->upper_limit;
+    } else if (pid->output < pid->lower_limit) {
+        float sat = pid->lower_limit - pid->output;
+        pid->integral += sat * pid->ka;
+        pid->output = pid->lower_limit;
+    }
+
+    return pid->output;
+}
+
 float fastsin(float angle)
 {
-    int sig = 0;
+    int sig        = 0;
     float tmpAngle = 0;
     if (angle >= 0.5f) {
-        sig = 1;
+        sig   = 1;
         angle = angle - 0.5f;
     }
     tmpAngle = (angle > 0.25f) ? (0.5f - angle) : angle;
-    
-    int a = tmpAngle * 36.0f;
-    float b = tmpAngle * 360.0f - a*10.0f;
-    float sin = pfSinTable[a] * pfCosTable[(int)b] +b * HOLLYST *pfSinTable[9-a];
+
+    int a     = tmpAngle * 36.0f;
+    float b   = tmpAngle * 360.0f - a * 10.0f;
+    float sin = pfSinTable[a] * pfCosTable[(int)b] + b * HOLLYST * pfSinTable[9 - a];
     if (sin > 1.0f) {
         sin = 1.0f;
     }
-    return (sig > 0) ? -sin: sin;
+    return (sig > 0) ? -sin : sin;
 }
 
 float fastcos(float angle)
 {
-    int sig = 0;
+    int sig        = 0;
     float tmpAngle = 0;
-    
+
     if (angle <= 0.75f) {
         angle += 0.25f;
     } else {
         angle -= 0.75f;
     }
-    
+
     if (angle >= 0.5f) {
-        sig = 1;
+        sig   = 1;
         angle = angle - 0.5f;
     }
     tmpAngle = (angle > 0.25f) ? (0.5f - angle) : angle;
-    
-    int a = tmpAngle * 36.0f;
-    float b = tmpAngle * 360.0f - a*10.0f;
-    float sin = pfSinTable[a] * pfCosTable[(int)b] +b * HOLLYST *pfSinTable[9-a];
+
+    int a     = tmpAngle * 36.0f;
+    float b   = tmpAngle * 360.0f - a * 10.0f;
+    float sin = pfSinTable[a] * pfCosTable[(int)b] + b * HOLLYST * pfSinTable[9 - a];
     if (sin > 1.0f) {
         sin = 1.0f;
     }
-    return (sig > 0) ? -sin: sin;      
+    return (sig > 0) ? -sin : sin;
 }
 
 float fastsqrt(float val)

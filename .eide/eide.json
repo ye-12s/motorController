@@ -37,6 +37,9 @@
                     "path": "Core/Src/adc.c"
                   },
                   {
+                    "path": "Core/Src/dma.c"
+                  },
+                  {
                     "path": "Core/Src/spi.c"
                   },
                   {
@@ -50,9 +53,6 @@
                   },
                   {
                     "path": "Core/Src/stm32g4xx_hal_msp.c"
-                  },
-                  {
-                    "path": "Core/Src/stm32g4xx_hal_timebase_tim.c"
                   }
                 ],
                 "folders": []
@@ -462,8 +462,7 @@
             "c99-mode": true,
             "C_FLAGS": "--diag_suppress=1 --diag_suppress=1295",
             "CXX_FLAGS": "--diag_suppress=1 --diag_suppress=1295",
-            "warnings": "all-warnings",
-            "enum-container-always-int": true,
+            "warnings": "no-warnings",
             "gnu-extensions": true
           },
           "asm-compiler": {},

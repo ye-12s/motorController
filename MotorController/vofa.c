@@ -7,8 +7,8 @@
 #include "foc_math.h"
 #include "usart.h"
 
-#define USING_VOFA_UART 1
-// #define USING_VOFA_USB_CDC 1
+// #define USING_VOFA_UART 1
+#define USING_VOFA_USB_CDC 1
 
 #define VOFA_CHANNEL_MAX   32
 
@@ -17,11 +17,10 @@
 extern UART_HandleTypeDef huart1;
 
 #if USING_VOFA_USB_CDC
-#define VOFA_SEND_HANDLE(ptr, size, wait)  \
-    CDC_Transmit_FS((uint8_t *)ptr, size); \
-    HAL_Delay(wait)
+#define VOFA_SEND_HANDLE(ptr, size, wait) \
+    CDC_Transmit_FS((uint8_t *)ptr, size);
 #elif USING_VOFA_UART
-#define VOFA_SEND_HANDLE(ptr, size, wait) HAL_UART_Transmit(&huart3, ptr, size, 0xffff)
+#define VOFA_SEND_HANDLE(ptr, size, wait) HAL_UART_Transmit_DMA(&huart3, ptr, size)
 #else
 #define VOFA_SEND_HANDLE(ptr, size, wait) (void)0
 #endif //  USING_VOFA_UART
@@ -39,7 +38,7 @@ void vofa_init(void)
 
 void vofa_set_channel(uint8_t channel, float value)
 {
-    if (channel > VOFA_CHANNEL_MAX) {
+    if (channel > VOFA_CHANNEL_MAX || channel == 0) {
         return;
     }
     vofa_channel[channel] = value;
@@ -51,6 +50,10 @@ void vofa_send(uint32_t wait)
     if (size == 0) {
         return;
     }
+    if (size + 1 > VOFA_CHANNEL_MAX) {
+        size--; // 保证最后一个元素是结束标志
+    }
+    vofa_channel[0]                      = HAL_GetTick() / 1000.0f;
     (*(uint32_t *)&vofa_channel[size++]) = VOFA_SEND_END_FLAG;
     VOFA_SEND_HANDLE((uint8_t *)vofa_channel, size * sizeof(float), wait);
     size = 0;

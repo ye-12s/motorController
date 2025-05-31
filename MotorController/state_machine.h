@@ -3,8 +3,8 @@
 #include "stdbool.h"
 #include "foc_type.h"
 
-void sm_init(statemachine_t *stateMachine);
-bool sm_nextState(statemachine_t *stateMachine, state_t state);
-state_t sm_getState(statemachine_t *stateMachine);
+void statemachine_init(statemachine_t *stateMachine);
+bool statemachine_nextState(statemachine_t *stateMachine, state_t state);
+state_t statemachine_getState(statemachine_t *stateMachine);
 
 #endif

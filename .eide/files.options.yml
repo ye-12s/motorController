@@ -17,4 +17,7 @@ version: "2.0"
 options:
     axdr:
         files: {}
-        virtualPathFiles: {}
+        virtualPathFiles:
+            <virtual_root>/Application/User/Core/dma.c: ""
+            <virtual_root>/Drivers/STM32G4xx_HAL_Driver/stm32g4xx_hal_spi.c: ""
+            <virtual_root>/Drivers/STM32G4xx_HAL_Driver/stm32g4xx_hal_spi_ex.c: ""

@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file    stm32g4xx_it.c
-  * @brief   Interrupt Service Routines.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file    stm32g4xx_it.c
+ * @brief   Interrupt Service Routines.
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2025 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
@@ -22,6 +22,7 @@
 #include "stm32g4xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "foc_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,8 +62,8 @@ extern ADC_HandleTypeDef hadc2;
 extern SPI_HandleTypeDef hspi1;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
-extern TIM_HandleTypeDef htim6;
-
+extern DMA_HandleTypeDef hdma_usart3_tx;
+extern UART_HandleTypeDef huart3;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -79,9 +80,8 @@ void NMI_Handler(void)
 
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
-   while (1)
-  {
-  }
+    while (1) {
+    }
   /* USER CODE END NonMaskableInt_IRQn 1 */
 }
 
@@ -192,9 +192,9 @@ void SysTick_Handler(void)
   /* USER CODE BEGIN SysTick_IRQn 0 */
 
   /* USER CODE END SysTick_IRQn 0 */
-
+  HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-
+    stateMachine_task(&g_axit);
   /* USER CODE END SysTick_IRQn 1 */
 }
 
@@ -204,6 +204,20 @@ void SysTick_Handler(void)
 /* For the available peripheral interrupt handler names,                      */
 /* please refer to the startup file (startup_stm32g4xx.s).                    */
 /******************************************************************************/
+
+/**
+  * @brief This function handles DMA1 channel3 global interrupt.
+  */
+void DMA1_Channel3_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel3_IRQn 0 */
+
+  /* USER CODE END DMA1_Channel3_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart3_tx);
+  /* USER CODE BEGIN DMA1_Channel3_IRQn 1 */
+
+  /* USER CODE END DMA1_Channel3_IRQn 1 */
+}
 
 /**
   * @brief This function handles ADC1 and ADC2 global interrupt.
@@ -277,17 +291,17 @@ void SPI1_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles TIM6 global interrupt, DAC1 and DAC3 channel underrun error interrupts.
+  * @brief This function handles USART3 global interrupt / USART3 wake-up interrupt through EXTI line 28.
   */
-void TIM6_DAC_IRQHandler(void)
+void USART3_IRQHandler(void)
 {
-  /* USER CODE BEGIN TIM6_DAC_IRQn 0 */
+  /* USER CODE BEGIN USART3_IRQn 0 */
 
-  /* USER CODE END TIM6_DAC_IRQn 0 */
-  HAL_TIM_IRQHandler(&htim6);
-  /* USER CODE BEGIN TIM6_DAC_IRQn 1 */
+  /* USER CODE END USART3_IRQn 0 */
+  HAL_UART_IRQHandler(&huart3);
+  /* USER CODE BEGIN USART3_IRQn 1 */
 
-  /* USER CODE END TIM6_DAC_IRQn 1 */
+  /* USER CODE END USART3_IRQn 1 */
 }
 
 /* USER CODE BEGIN 1 */
