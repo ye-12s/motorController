@@ -817,6 +817,11 @@
               <FileType>1</FileType>
               <FilePath>..\MotorController\foc_app.c</FilePath>
             </File>
+            <File>
+              <FileName>foc_cmd_resovler.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\MotorController\foc_cmd_resovler.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
