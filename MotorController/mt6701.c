@@ -1,6 +1,9 @@
 #include "mt6701.h"
 #include <math.h>
+#include <stdbool.h>
+#include <stdint.h>
 
+#include "foc_type.h"
 #include "stm32g4xx_hal.h"
 
 #define MT6701_CS_LOW()  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_RESET)
@@ -60,80 +63,133 @@ static int mt6701_read(void)
 
 int mt6701_sampleNow(encoder_t *enc)
 {
-    enc->raw = mt6701_read();
-
-    if (enc->raw < 0) {
-        // 此处需要使用速度积分计算角度
-        return enc->raw; // 返回错误
+    if (enc->updated == true) {
+        return -1; // Encoder already updated, cannot sample now
     }
-
-    int32_t angle_cnt = enc->raw >> 10;
-    if (enc->dir == 1) {
-        // 反转
-        angle_cnt = enc->cpr - angle_cnt;
-        if (angle_cnt < 0) {
-            angle_cnt += enc->cpr; // 确保角度在0到cpr之间
-        }
-    }
-
-    uint32_t diff = angle_cnt - enc->offset;
-
-    diff = fmod(diff, enc->cpr);
-
-    enc->diff = diff;
-
-    enc->rad = (float)diff * 2 * PI / enc->cpr;
-
-    float dt_angle = enc->rad - enc->mech_rad_last;
-    if (dt_angle > PI) {
-        dt_angle -= 2 * PI;
-    } else if (dt_angle < -PI) {
-        dt_angle += 2 * PI;
-    }
-    enc->mech_rad_last      = enc->rad;
-    float instantaneous_rpm = (dt_angle / (PI * 2)) * (60 / enc->sampledt);
-
-    enc->rpm = instantaneous_rpm;
-
-    enc->fittle_rpm = enc->alpha * instantaneous_rpm + (1 - enc->alpha) * enc->fittle_rpm;
-
-    // float error = instantaneous_rpm - enc->pll_output;
-
-    // enc->pll_integrator += error * enc->sampledt;
-    // enc->pll_output += enc->pll_kp * error + enc->pll_ki * enc->pll_integrator;
-    // enc->rpm = enc->pll_output;
+    MT6701_CS_LOW();
+    HAL_SPI_TransmitReceive_DMA(&hspi1, (uint8_t[]){0x00, 0x00, 0x00}, (uint8_t *)enc->rx_buf, 3);
     return 0;
 }
 
 int mt6701_calibOffset(encoder_t *enc)
 {
-    enc->raw = mt6701_read();
-    if (enc->raw < 0) {
-        return enc->raw; // 返回错误
+    if (enc->updated == false) {
+        return -1; // Encoder not updated, cannot calibrate offset
     }
-    enc->offset = enc->raw >> 10;
-    if (enc->dir == 1) {
-        // 反转
-        enc->offset = enc->cpr - enc->offset;
+    uint32_t raw     = enc->rx_buf[0] << 16 | enc->rx_buf[1] << 8 | enc->rx_buf[2];
+    uint8_t calc_crc = crc6_itu((uint8_t[]){raw >> 18, raw >> 12, raw >> 6}, 3);
+    uint8_t crc      = raw & 0x3f; // 取低6位
+    if (calc_crc != crc) {
+        return -2; // CRC error
     }
+    enc->offset = raw >> 10;
     return 0;
 }
 
 float mt6701_getElecRad(encoder_t *enc)
 {
     enc->elec_rad = enc->rad * enc->pp;
-    enc->elec_rad = fmod(enc->elec_rad, 2 * PI);
+    enc->elec_rad = fmodf(enc->elec_rad, 2 * PI);
     return enc->elec_rad;
 }
 
 float mt6701_gethpp(encoder_t *enc, float dt)
 {
     float hpp = 0;
-
+    if (enc->rpm > 0) {
+        hpp = enc->fittle_rpm * enc->pp * 2 * PI / 60.0f; // 转矩
+    } else if (enc->rpm < 0) {
+        hpp = -enc->fittle_rpm * enc->pp * 2 * PI / 60.0f; // 转矩
+    }
     return hpp;
 }
 
 float mt6701_getRpm(encoder_t *enc)
 {
     return enc->rpm;
+}
+float normalize_angle(float rad)
+{
+    while (rad > PI) {
+        rad -= 2 * PI; // 确保在-PI到PI之间
+    }
+    while (rad < -PI) {
+        rad += 2 * PI;
+    }
+    return rad;
+}
+void mt6701_update(encoder_t *enc)
+{
+    float dt = enc->sampledt;
+
+    if (enc->updated == 0) {
+        enc->missed_cnt++;
+
+        float est_rad = enc->rad + enc->fittle_rpm * dt * (2 * PI / 60.0f);
+        est_rad       = normalize_angle(est_rad);
+        if (est_rad < 0) est_rad += 2 * PI;
+        enc->rad = est_rad;
+    } else {
+        enc->updated = 0;
+
+        int32_t angle_cnt = enc->raw - enc->offset;
+        if (enc->dir == 1) {
+            angle_cnt = -angle_cnt;
+        }
+
+        angle_cnt = fmodf(angle_cnt, enc->cpr);
+        if (angle_cnt < 0) {
+            angle_cnt += enc->cpr;
+        }
+
+        float new_rad = (float)angle_cnt * 2 * PI / enc->cpr;
+        new_rad       = normalize_angle(new_rad);
+
+        enc->rad = new_rad;
+
+        // 滑动窗口法计算 omega（速度）
+        enc->angle_buffer[enc->buffer_idx] = new_rad;
+        int oldest_idx                     = (enc->buffer_idx + 1) % SPEED_FILTER_LEN;
+        enc->buffer_idx                    = (enc->buffer_idx + 1) % SPEED_FILTER_LEN;
+
+        float angle_diff = new_rad - enc->angle_buffer[oldest_idx];
+        if (angle_diff > PI) angle_diff -= 2 * PI;
+        if (angle_diff < -PI) angle_diff += 2 * PI;
+
+        float total_dt = dt * (enc->buffer_filled ? SPEED_FILTER_LEN : enc->buffer_idx);
+        if (total_dt > 0) {
+            enc->omega              = angle_diff / total_dt;
+            float instantaneous_rpm = (angle_diff / (2 * PI)) * (60.0f / total_dt);
+            enc->rpm                = instantaneous_rpm;
+            enc->fittle_rpm         = enc->alpha * instantaneous_rpm + (1 - enc->alpha) * enc->fittle_rpm;
+        }
+
+        enc->mech_rad_last = new_rad;
+        if (enc->buffer_idx == 0) enc->buffer_filled = true;
+
+        enc->missed_cnt = 0;
+    }
+}
+
+void mt6701_spi_cb(encoder_t *enc)
+{
+    MT6701_CS_HIGH();
+    uint32_t raw = enc->rx_buf[0] << 16 | enc->rx_buf[1] << 8 | enc->rx_buf[2];
+    uint8_t crc  = raw & 0x3f; // 取低6位
+
+    uint8_t calc_crc = crc6_itu((uint8_t[]){raw >> 18, raw >> 12, raw >> 6}, 3); // 计算CRC
+    if (crc != calc_crc) {
+        return;
+    }
+    enc->raw     = raw >> 10;
+    enc->updated = 1; // 更新标志位
+}
+
+int mt6701_init(encoder_t *enc)
+{
+    enc->buffer_idx    = 0;
+    enc->buffer_filled = false;
+    for (int i = 0; i < SPEED_FILTER_LEN; i++) {
+        enc->angle_buffer[i] = 0.0f;
+    }
 }

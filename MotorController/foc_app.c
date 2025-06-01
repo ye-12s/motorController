@@ -4,12 +4,12 @@
 #include "foc_param.h"
 #include "foc_type.h"
 #include "mt6701.h"
+#include "spi.h"
 #include "state_machine.h"
 #include "stm32g4xx_hal.h"
 #include "tim.h"
 #include "usart.h"
 #include "vofa.h"
-
 
 void foc_current_restruct(axit_t *axit);
 
@@ -18,13 +18,18 @@ float vamp   = 0.8f;
 
 axit_t g_axit = {
     .encoder = {
-        .cpr = ENCODER_CPR,
-        .pp  = MOTOR_POLE_PAIRS,
-        .dir = 1,
+        .cpr      = ENCODER_CPR,
+        .pp       = MOTOR_POLE_PAIRS,
+        .dir      = 1,
+        .sampledt = 0.00005f, // 20KHz
+        .alpha    = 0.7f,
     },
-    .mode = FOC_MODE_VF,
-    .udc  = 24.0f, // 电压
-    .amp  = 0.8f,
+    .mode   = FOC_MODE_VF,
+    .udc    = 24.0f, // 电压
+    .amp    = 0.8f,
+    .pid_iq = {
+        .kp = 0.1f,
+    },
 };
 
 void foc_currControl(axit_t *axit)
@@ -33,9 +38,6 @@ void foc_currControl(axit_t *axit)
     park(&axit->Ialbe_fb, &axit->Idq_fb, axit->angle);
 
     // do PI control
-    axit->Idq_ref.arg1 = 0.0f;      // Id reference
-    axit->Idq_ref.arg2 = axit->amp; // Iq reference
-
     if (axit->mode == FOC_MODE_VF) {
         axit->Udq_ref = axit->Idq_ref;
     } else if (axit->mode == FOC_MODE_IF) {
@@ -54,7 +56,7 @@ void foc_scheduler(axit_t *axit)
     state_t state = statemachine_getState(&axit->stateMachine);
 
     if (state != S_ALIGN) {
-        mt6701_sampleNow(&axit->encoder);
+        mt6701_update(&axit->encoder);
         axit->angle = mt6701_getElecRad(&axit->encoder);
     }
 
@@ -69,14 +71,25 @@ void foc_scheduler(axit_t *axit)
         }
     }
 
-    vofa_set_channel(1, axit->angle);
-    vofa_set_channel(2, axit->Idq_fb.arg1);
-    vofa_set_channel(3, axit->Idq_fb.arg2);
-    vofa_set_channel(4, axit->Ialbe_fb.arg1);
-    vofa_set_channel(5, axit->Ialbe_fb.arg2);
-    vofa_set_channel(6, axit->Iabc_fb.arg1);
-    vofa_set_channel(7, axit->Iabc_fb.arg2);
-    vofa_set_channel(8, axit->Iabc_fb.arg3);
+    mt6701_sampleNow(&axit->encoder);
+
+    // vofa_set_channel(1, axit->angle);
+    // vofa_set_channel(2, axit->Idq_fb.arg1);
+    // vofa_set_channel(3, axit->Idq_fb.arg2);
+    // vofa_set_channel(4, axit->Ialbe_fb.arg1);
+    // vofa_set_channel(5, axit->Ialbe_fb.arg2);
+    // vofa_set_channel(6, axit->Iabc_fb.arg1);
+    // vofa_set_channel(7, axit->Iabc_fb.arg2);
+    // vofa_set_channel(8, axit->Iabc_fb.arg3);
+    // vofa_set_channel(9, mt6701_getRpm(&axit->encoder));
+    // vofa_set_channel(10, axit->encoder.fittle_rpm);
+
+    vofa_set_channel(1, axit->encoder.rad);
+    vofa_set_channel(2, axit->encoder.missed_cnt);
+    vofa_set_channel(3, axit->encoder.rpm);
+    vofa_set_channel(4, axit->encoder.diff);
+    vofa_set_channel(5, axit->encoder.raw);
+    vofa_set_channel(6, axit->encoder.omega);
     vofa_send(1);
 }
 
@@ -187,6 +200,9 @@ void stateMachine_task(axit_t *axit)
 void foc_app_init(void)
 {
     // 初始化状态机
+    mt6701_init(&g_axit.encoder);
+    statemachine_init(&g_axit.stateMachine);
+
     vofa_init();
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
     HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
@@ -202,8 +218,6 @@ void foc_app_init(void)
     pwm_OutputDisable();
     pwm_OutputLowSide();
 
-    statemachine_init(&g_axit.stateMachine);
-
     // 初始化VOFA
     vofa_init();
 
@@ -211,7 +225,6 @@ void foc_app_init(void)
     // statemachine_nextState(&g_axit.stateMachine, S_IDLE_DONE);
     g_axit.udc = 24.0f; // 设置电压
 }
-
 
 void openloop_mode(void)
 {
@@ -292,12 +305,16 @@ void foc_current_restruct(axit_t *axit)
     axit->udc          = (float)axit->rawADC[4] * 3.3f / 4096.0f * 16; // udc
 }
 
-
-
 // 电流采样中断
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1) {
         foc_scheduler(&g_axit);
+    }
+}
+void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
+{
+    if (hspi == &hspi1) {
+        mt6701_spi_cb(&g_axit.encoder);
     }
 }

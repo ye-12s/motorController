@@ -51,31 +51,36 @@ typedef struct
     int faultNow;
 } statemachine_t;
 
+#define SPEED_FILTER_LEN 8 
+
 typedef struct
 {
-    uint32_t raw;        // 原始值
+    uint8_t rx_buf[3];
+    uint32_t raw;
+
     uint32_t offset;     // 0角度偏移值
     uint8_t pp;          // 电机极对数
     uint8_t dir;         // 电机方向 0:正转 1:反转
     float rad;           // 电机转子角度 0~2pi
     float elec_rad;      // 电机转子电角度 0~2pi
     uint32_t cpr;        // 电机编码器线数
-    int32_t diff;        // 与上次相比角度差
+    float diff;          // 与上次相比角度差
     float elec_rad_last; // 上次电角度
     float mech_rad_last; // 机械角度
     float sampledt;      // 采样时间
+    
     float rpm;           // 电机转速
     float hpp;           // 电机转矩
-
+    float omega;         // 电机角速度
     float fittle_rpm; // 滤波转速
-
     float alpha; // 滤波系数
 
-    float pll_enable; // PLL使能
-    float pll_ki;
-    float pll_kp;
-    float pll_integrator;
-
+    float angle_buffer[SPEED_FILTER_LEN];
+    int buffer_idx;
+    bool buffer_filled;
+    
+    uint8_t updated;
+    uint32_t missed_cnt;
 } encoder_t;
 
 typedef struct
