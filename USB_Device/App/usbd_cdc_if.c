@@ -20,9 +20,9 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "usbd_cdc_if.h"
-#include "foc_app.h"
 
 /* USER CODE BEGIN INCLUDE */
+#include "foc_app.h"
 
 /* USER CODE END INCLUDE */
 
