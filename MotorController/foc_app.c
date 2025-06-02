@@ -11,22 +11,25 @@
 #include "usart.h"
 #include "vofa.h"
 
-void foc_current_restruct(axit_t *axit);
+void current_update(axit_t *axit);
 
 float vangle = 0;
 float vamp   = 0.8f;
 
 axit_t g_axit = {
-    .encoder = {
-        .cpr      = ENCODER_CPR,
-        .pp       = MOTOR_POLE_PAIRS,
-        .dir      = 1,
-        .sampledt = 0.00005f, // 20KHz
-        .alpha    = 0.7f,
+
+    .mode          = FOC_MODE_VF,
+    .udc           = 24.0f, // 电压
+    .amp           = 0.8f,
+    .andle_div     = 4, // 5k
+    .andle_div_cnt = 0,
+    .encoder       = {
+              .cpr      = ENCODER_CPR,
+              .pp       = MOTOR_POLE_PAIRS,
+              .dir      = 1,
+              .sampledt = 0.0002f, // 5kHz
+              .alpha    = 0.7f,
     },
-    .mode   = FOC_MODE_VF,
-    .udc    = 24.0f, // 电压
-    .amp    = 0.8f,
     .pid_iq = {
         .kp = 0.1f,
     },
@@ -52,12 +55,18 @@ void foc_currControl(axit_t *axit)
 
 void foc_scheduler(axit_t *axit)
 {
-    foc_current_restruct(axit);
+    current_update(axit);
     state_t state = statemachine_getState(&axit->stateMachine);
 
     if (state != S_ALIGN) {
-        mt6701_update(&axit->encoder);
-        axit->angle = mt6701_getElecRad(&axit->encoder);
+        if (axit->andle_div > axit->andle_div_cnt) {
+            axit->andle_div_cnt++;
+        } else {
+            mt6701_update(&axit->encoder);
+            mt6701_sampleNow(&axit->encoder);
+            axit->angle         = mt6701_getElecRad(&axit->encoder);
+            axit->andle_div_cnt = 0;
+        }
     }
 
     if (state == S_RUN) {
@@ -71,25 +80,15 @@ void foc_scheduler(axit_t *axit)
         }
     }
 
-    mt6701_sampleNow(&axit->encoder);
-
-    // vofa_set_channel(1, axit->angle);
-    // vofa_set_channel(2, axit->Idq_fb.arg1);
-    // vofa_set_channel(3, axit->Idq_fb.arg2);
-    // vofa_set_channel(4, axit->Ialbe_fb.arg1);
-    // vofa_set_channel(5, axit->Ialbe_fb.arg2);
-    // vofa_set_channel(6, axit->Iabc_fb.arg1);
-    // vofa_set_channel(7, axit->Iabc_fb.arg2);
-    // vofa_set_channel(8, axit->Iabc_fb.arg3);
-    // vofa_set_channel(9, mt6701_getRpm(&axit->encoder));
-    // vofa_set_channel(10, axit->encoder.fittle_rpm);
-
-    vofa_set_channel(1, axit->encoder.rad);
-    vofa_set_channel(2, axit->encoder.missed_cnt);
-    vofa_set_channel(3, axit->encoder.rpm);
-    vofa_set_channel(4, axit->encoder.diff);
-    vofa_set_channel(5, axit->encoder.raw);
-    vofa_set_channel(6, axit->encoder.omega);
+    vofa_set_channel(1, axit->angle);
+    vofa_set_channel(2, axit->Idq_fb.arg1);
+    vofa_set_channel(3, axit->Idq_fb.arg2);
+    vofa_set_channel(4, axit->Ialbe_fb.arg1);
+    vofa_set_channel(5, axit->Ialbe_fb.arg2);
+    vofa_set_channel(6, axit->Iabc_fb.arg1);
+    vofa_set_channel(7, axit->Iabc_fb.arg2);
+    vofa_set_channel(8, axit->Iabc_fb.arg3);
+    vofa_set_channel(9, mt6701_getRpm(&axit->encoder));
     vofa_send(1);
 }
 
@@ -135,7 +134,7 @@ void stateMachine_task(axit_t *axit)
             if (axit->alignTimes < 2) {
                 if (axit->alignCnt < 2000) // 2s
                 {
-                    axit->Udq_ref.arg1 = 0.8f;
+                    axit->Udq_ref.arg1 = 1.2f;
                     axit->Udq_ref.arg2 = 0.0f;
                     if (axit->alignTimes == 0) {
                         axit->angle = DEG_TO_RAD(270);
@@ -147,8 +146,10 @@ void stateMachine_task(axit_t *axit)
                     set_duty(&axit->swtime);
                     axit->alignCnt++;
                 } else {
-                    // printk("align done tick now :0x%08u", HAL_GetTick());
+                    axit->encoder.updated = 0;
+                    mt6701_sampleNow(&axit->encoder);
                     if (mt6701_calibOffset(&axit->encoder) == 0) {
+                        printk("align done angle:%.2f", axit->encoder.rad);
                         axit->alignCnt = 0;
                         axit->alignTimes++;
                     }
@@ -281,11 +282,11 @@ void pwm_OutputEnable(void)
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_4, __HAL_TIM_GET_AUTORELOAD(&htim1) - 44);
 }
 
-void foc_current_restruct(axit_t *axit)
+void current_update(axit_t *axit)
 {
-    axit->rawADC[0] = ADC1->JDR1; // Ia
+    axit->rawADC[0] = ADC1->JDR1; // Ic
     axit->rawADC[1] = ADC1->JDR2; // Ib
-    axit->rawADC[2] = ADC1->JDR3; // Ic
+    axit->rawADC[2] = ADC1->JDR3; // Ia
     axit->rawADC[3] = ADC1->JDR4; // Idc
     axit->rawADC[4] = ADC2->JDR1; // udc
     axit->rawADC[5] = ADC2->JDR2; // ua
@@ -293,9 +294,9 @@ void foc_current_restruct(axit_t *axit)
     axit->rawADC[7] = ADC2->JDR4; // uc
 
     // 电流还原
-    axit->Iabc_fb.arg1 = (float)(axit->rawADC[0] - axit->offsetADC[0]) * 3.3f / 4096.0f / (0.005 * 20); // Ia
+    axit->Iabc_fb.arg3 = (float)(axit->rawADC[0] - axit->offsetADC[0]) * 3.3f / 4096.0f / (0.005 * 20); // Ic
     axit->Iabc_fb.arg2 = (float)(axit->rawADC[1] - axit->offsetADC[1]) * 3.3f / 4096.0f / (0.005 * 20); // Ib
-    axit->Iabc_fb.arg3 = -axit->Iabc_fb.arg1 - axit->Iabc_fb.arg2;                                      // Ic
+    axit->Iabc_fb.arg1 = -axit->Iabc_fb.arg3 - axit->Iabc_fb.arg2;                                      // Ia
     axit->idc          = (float)(axit->rawADC[3] - axit->offsetADC[3]) * 3.3f / 4096.0f / (0.005 * 20); // Idc
 
     // 电压还原

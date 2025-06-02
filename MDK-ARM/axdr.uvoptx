@@ -152,18 +152,18 @@
         <Bp>
           <Number>0</Number>
           <Type>0</Type>
-          <LineNumber>26</LineNumber>
+          <LineNumber>201</LineNumber>
           <EnabledFlag>1</EnabledFlag>
-          <Address>134260582</Address>
+          <Address>134262424</Address>
           <ByteObject>0</ByteObject>
           <HtxType>0</HtxType>
           <ManyObjects>0</ManyObjects>
           <SizeOfObject>0</SizeOfObject>
           <BreakByAccess>0</BreakByAccess>
           <BreakIfRCount>1</BreakIfRCount>
-          <Filename>..\MotorController\foc_cmd_resovler.c</Filename>
+          <Filename>..\MotorController\mt6701.c</Filename>
           <ExecCommand></ExecCommand>
-          <Expression>\\axdr\../MotorController/foc_cmd_resovler.c\26</Expression>
+          <Expression>\\axdr\../MotorController/mt6701.c\201</Expression>
         </Bp>
       </Breakpoint>
       <WatchWindow1>

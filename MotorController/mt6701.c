@@ -106,20 +106,26 @@ float mt6701_gethpp(encoder_t *enc, float dt)
 
 float mt6701_getRpm(encoder_t *enc)
 {
-    return enc->rpm;
+    return enc->fittle_rpm;
 }
 float normalize_angle(float rad)
 {
-    while (rad > PI) {
-        rad -= 2 * PI; // 确保在-PI到PI之间
+    rad = fmodf(rad, 2 * PI);
+    // if (rad > PI) {
+    //     rad -= 2 * PI;
+    // } else if (rad < -PI) {
+    //     rad += 2 * PI;
+    // }
+
+    if (rad < 0) {
+        rad += 2 * PI; // 确保角度在0到2π之间
     }
-    while (rad < -PI) {
-        rad += 2 * PI;
-    }
+
     return rad;
 }
 void mt6701_update(encoder_t *enc)
 {
+#if 0
     float dt = enc->sampledt;
 
     if (enc->updated == 0) {
@@ -169,6 +175,63 @@ void mt6701_update(encoder_t *enc)
 
         enc->missed_cnt = 0;
     }
+#else
+    if (enc->updated == 0) {
+        enc->missed_cnt++;
+
+        // 使用滤波后的速度预测角度
+        float dt       = enc->sampledt;
+        float last_rad = enc->rad;
+        float est_rad  = last_rad + enc->fittle_rpm * dt * (2 * PI / 60.0f);
+        est_rad        = normalize_angle(est_rad);
+
+        if (est_rad < 0) {
+            est_rad += 2 * PI;
+        }
+
+        enc->rad = est_rad;
+    } else {
+        enc->updated = 0;
+
+        float angle_cnt = enc->raw - enc->offset;
+        if (enc->dir == 1) {
+            angle_cnt = -angle_cnt;
+        }
+
+        angle_cnt = fmodf(angle_cnt, enc->cpr);
+        if (angle_cnt < 0) {
+            angle_cnt += enc->cpr;
+        }
+
+        enc->rad  = (float)angle_cnt * 2 * PI / enc->cpr;
+        enc->rad  = normalize_angle(enc->rad);
+        enc->diff = enc->rad - enc->mech_rad_last;
+
+        // 防止角度突变
+        if (enc->diff > PI) {
+            enc->diff -= 2 * PI;
+        } else if (enc->diff < -PI) {
+            enc->diff += 2 * PI;
+        }
+
+        // // 限幅角度差值，避免瞬时跳变
+        // float max_rad_step = 2 * PI * 0.5f; // 每周期最多跳动0.5圈（可调）
+        // if (enc->diff > max_rad_step) enc->diff = max_rad_step;
+        // if (enc->diff < -max_rad_step) enc->diff = -max_rad_step;
+
+        enc->mech_rad_last = enc->rad;
+
+        float dt                = enc->sampledt * (enc->missed_cnt + 1);
+        enc->omega              = enc->diff / dt;
+        float instantaneous_rpm = (enc->diff / (2 * PI)) * (60.0f / dt);
+        enc->rpm                = instantaneous_rpm;
+
+        // 使用低通滤波后的速度
+        enc->fittle_rpm = enc->alpha * instantaneous_rpm + (1.0f - enc->alpha) * enc->fittle_rpm;
+
+        enc->missed_cnt = 0;
+    }
+#endif
 }
 
 void mt6701_spi_cb(encoder_t *enc)

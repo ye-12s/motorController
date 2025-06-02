@@ -78,7 +78,7 @@ typedef struct
     float angle_buffer[SPEED_FILTER_LEN];
     int buffer_idx;
     bool buffer_filled;
-    
+
     uint8_t updated;
     uint32_t missed_cnt;
 } encoder_t;
@@ -91,8 +91,6 @@ typedef struct
 	float ka;   // 抗饱和系数
 	float upper_limit;
 	float lower_limit;
-	// float integral_limit_max;
-	// float integral_limit_min;
 	float preErr;       // 前一次误差
 	float integral;     // 积分
 	float derivative;   // 微分
@@ -107,6 +105,9 @@ typedef struct {
 
     uint32_t alignCnt;
     uint8_t alignTimes;
+
+    uint32_t andle_div;
+    uint32_t andle_div_cnt;
 
     foc_mode_t mode; // FOC模式
 
