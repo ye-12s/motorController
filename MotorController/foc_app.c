@@ -16,23 +16,24 @@ void current_update(axit_t *axit);
 float vangle = 0;
 float vamp   = 0.8f;
 
-axit_t g_axit = {
+axit_t g_axit =
+    {
 
-    .mode          = FOC_MODE_VF,
-    .udc           = 24.0f, // 电压
-    .amp           = 0.8f,
-    .andle_div     = 4, // 5k
-    .andle_div_cnt = 0,
-    .encoder       = {
-              .cpr      = ENCODER_CPR,
-              .pp       = MOTOR_POLE_PAIRS,
-              .dir      = 1,
-              .sampledt = 0.0002f, // 5kHz
-              .alpha    = 0.7f,
-    },
-    .pid_iq = {
-        .kp = 0.1f,
-    },
+        .mode          = FOC_MODE_VF,
+        .udc           = 24.0f, // 电压
+        .amp           = 0.8f,
+        .andle_div     = 4, // 5k
+        .andle_div_cnt = 0,
+        .encoder       = {
+                  .cpr      = ENCODER_CPR,
+                  .pp       = MOTOR_POLE_PAIRS,
+                  .dir      = 1,
+                  .sampledt = 0.0002f, // 5kHz
+                  .alpha    = 0.7f,
+        },
+        .pid_iq = {
+            .kp = 0.1f,
+        },
 };
 
 void foc_currControl(axit_t *axit)
@@ -51,6 +52,36 @@ void foc_currControl(axit_t *axit)
     invpark(&axit->Udq_ref, &axit->Ualbe_ref, axit->angle);
     svpwm(&axit->Ualbe_ref, &axit->swtime, axit->udc, FOC_TIM_PRESCALER);
     set_duty(&axit->swtime);
+}
+
+float spd_ramp_update(speed_rate_t *ramp, float ref)
+{
+    if (ref > ramp->ramp) {
+        ramp->ramp += ramp->ramp_inc;
+        if (ramp->ramp > ref) {
+            ramp->ramp = ref;
+        }
+    } else if (ref < ramp->ramp) {
+        ramp->ramp -= ramp->ramp_inc;
+        if (ramp->ramp < ref) {
+            ramp->ramp = ref;
+        }
+    }
+    ramp->ref = ref;
+    return ramp->ramp;
+}
+
+void foc_spdControl(axit_t *axit)
+{
+    axit->spd_fb = mt6701_getRpm(&axit->encoder);
+
+    axit->spd_ref = spd_ramp_update(&axit->spd_rate,
+                                    axit->spd_ref - axit->spd_fb);
+
+    axit->Idq_ref.arg2 = pid_controller(&axit->pid_spd,
+                                        axit->spd_ref -
+                                            mt6701_getRpm(&axit->encoder));
+    axit->Idq_ref.arg1 = 0;
 }
 
 void foc_scheduler(axit_t *axit)
@@ -177,7 +208,7 @@ void stateMachine_task(axit_t *axit)
             statemachine_nextState(&axit->stateMachine, S_RUN);
             break;
         case S_RUN:
-
+            foc_spdControl(axit);
             break;
         case S_ANY_STOP:
             pwm_OutputDisable();
